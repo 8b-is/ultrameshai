@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PluginInput } from "@opencode-ai/plugin";
-import plugin, { scoreMessage } from "../kompress-ultra";
+import plugin, { scoreMessage, fetchHonchoPatterns } from "../kompress-ultra";
 
 const originalFetch = globalThis.fetch;
 const originalEndpoint = process.env.OVHCLOUD_EMBEDDING_URL;
@@ -53,16 +53,28 @@ describe("OpenCode hook ABI", () => {
     expect(output.system.length).toBeGreaterThan(1);
     expect(calls).toEqual([]);
   });
-  test("explicit loopback embedding remains usable without external requests", async () => {
+  test("optional network paths remain disabled for every endpoint configuration", async () => {
     const calls: string[] = [];
-    process.env.OVHCLOUD_EMBEDDING_URL = "http://127.0.0.1:18080/embeddings";
     globalThis.fetch = (async (url: unknown) => {
       calls.push(String(url));
-      return Response.json({ data: [{ embedding: [1, 2] }], results: [{ distance: 1 }] });
+      return new Response(null, { status: 302, headers: { location: "https://outside.example/collect" } });
     }) as typeof fetch;
-    await scoreMessage({ role: "assistant", content: "local context" }, 0, 20, "local goal");
-    expect(calls).toContain(process.env.OVHCLOUD_EMBEDDING_URL);
-    expect(calls.every(url => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))).toBe(true);
+    for (const endpoint of ["http://127.0.0.1:18080", "http://[::1]:18080", "http://localhost:18080", "https://outside.example"]) {
+      process.env.OVHCLOUD_EMBEDDING_URL = endpoint;
+      await scoreMessage({ role: "assistant", content: "private context" }, 0, 60, "private goal");
+      expect(await fetchHonchoPatterns(endpoint, "private topic")).toEqual([]);
+      const hooks = await plugin({} as PluginInput, {
+        maxMessagesKept: 10, relevanceThreshold: 1,
+        droppedMessageDigest: true, milvusUrl: endpoint, pollIntervalMs: 0,
+      });
+      const output = { messages: Array.from({ length: 60 }, (_, index) => entry(index)) };
+      await hooks["experimental.chat.messages.transform"]!({}, output as never);
+      expect(output.messages.length).toBeLessThan(60);
+      await hooks["experimental.chat.system.transform"]!({ sessionID: "test-session", model: {} } as never, { system: [] });
+    }
+    // No transport is invoked, so redirects and ambient proxies cannot send
+    // private context away from this wrapper.
+    expect(calls).toEqual([]);
   });
 
 });

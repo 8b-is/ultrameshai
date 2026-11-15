@@ -11,7 +11,6 @@ import {
   recordFailure,
   computeDensity,
   adaptiveThreshold,
-  scoreMessage as scoreMessageWithEmbedding,
   scoreMessageSync,
   isProtected,
   ebbinghausDecay,
@@ -21,10 +20,7 @@ import {
   buildKompressDisplay,
   readBrainState,
   buildBrainLine,
-  fetchHonchoPatterns as fetchPatternsWithEmbedding,
   writeCompactionStats,
-  writeDroppedDigest,
-  enqueueCirculator,
   classifyMessage,
   escalateForBudget,
   DEFAULT_BUDGETS,
@@ -49,31 +45,16 @@ export {
   escalateForBudget,
 };
 
-// Hosted fallback endpoints are never used by this wrapper. Embedding and
-// memory writes require explicitly configured loopback services.
-function isLoopbackURL(value: string | undefined): boolean {
-  if (!value) return false;
-  try {
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol)
-      && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-      && !url.username && !url.password;
-  } catch { return false; }
+// Optional embedding, Honcho, digest and circulation networking is disabled.
+// The upstream transport does not enforce literal loopback, redirect refusal,
+// or proxy isolation. Keep scoring synchronous until a request-scoped secure
+// transport can be injected; endpoint environment variables cannot opt around it.
+async function scoreMessage(message: Message, index: number, total: number, _taskGoal?: string) {
+  return scoreMessageSync(message, index, total);
 }
 
-function localEmbeddingConfigured(): boolean {
-  return isLoopbackURL(process.env.OVHCLOUD_EMBEDDING_URL);
-}
-
-async function scoreMessage(...args: Parameters<typeof scoreMessageWithEmbedding>) {
-  return localEmbeddingConfigured()
-    ? scoreMessageWithEmbedding(...args)
-    : scoreMessageSync(args[0], args[1], args[2]);
-}
-
-async function fetchHonchoPatterns(url: string, topic: string) {
-  return localEmbeddingConfigured() && isLoopbackURL(url)
-    ? fetchPatternsWithEmbedding(url, topic) : [];
+async function fetchHonchoPatterns(_url: string, _topic: string): Promise<string[]> {
+  return [];
 }
 
 // ─── Plugin State ───────────────────────────────────────────────────────────
@@ -189,21 +170,7 @@ const createContextHooks = (_input: PluginInput, options?: KompressUltraOptions)
         : DEFAULT_BUDGETS.orchestrator;
       const budgeted = escalateForBudget(rewritten, budget);
 
-      // The package embeds circulation batches asynchronously; gate both
-      // destinations and use its actual CirculatorInput shape.
       const prunedCount = messages.length - budgeted.length;
-      if (prunedCount > 0 && localEmbeddingConfigured()
-          && isLoopbackURL(process.env.KOMPRESS_MILVUS_URL ?? "http://localhost:19530")) {
-        for (const msg of dropped) {
-          enqueueCirculator({
-            content: msg.content,
-            classification: classifyMessage(msg.content),
-            session_id: String(ctx.session_id ?? "unknown"),
-            agent_type: agentType,
-            message_role: msg.role,
-          });
-        }
-      }
 
       // Update context
       if (prunedCount > 0) {
@@ -237,10 +204,7 @@ const createContextHooks = (_input: PluginInput, options?: KompressUltraOptions)
 
         await writeCompactionStats(mergedOpts.mempalaceDb, prunedCount, budgeted.length);
 
-        if (mergedOpts.droppedMessageDigest && dropped.length > 0
-            && localEmbeddingConfigured() && isLoopbackURL(mergedOpts.milvusUrl)) {
-          await writeDroppedDigest(dropped, mergedOpts.milvusUrl);
-        }
+
       }
     },
 
