@@ -1,5 +1,5 @@
 // kompress-ultra: 4-role living context layer (Composer, Pruner, Rewriter, Circulator)
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Hooks, PluginInput } from "@opencode-ai/plugin";
 import {
   type KompressUltraOptions,
   DEFAULT_OPTIONS,
@@ -11,7 +11,8 @@ import {
   recordFailure,
   computeDensity,
   adaptiveThreshold,
-  scoreMessage,
+  scoreMessage as scoreMessageWithEmbedding,
+  scoreMessageSync,
   isProtected,
   ebbinghausDecay,
   structuralBoost,
@@ -20,7 +21,7 @@ import {
   buildKompressDisplay,
   readBrainState,
   buildBrainLine,
-  fetchHonchoPatterns,
+  fetchHonchoPatterns as fetchPatternsWithEmbedding,
   writeCompactionStats,
   writeDroppedDigest,
   enqueueCirculator,
@@ -48,6 +49,33 @@ export {
   escalateForBudget,
 };
 
+// Hosted fallback endpoints are never used by this wrapper. Embedding and
+// memory writes require explicitly configured loopback services.
+function isLoopbackURL(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol)
+      && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+      && !url.username && !url.password;
+  } catch { return false; }
+}
+
+function localEmbeddingConfigured(): boolean {
+  return isLoopbackURL(process.env.OVHCLOUD_EMBEDDING_URL);
+}
+
+async function scoreMessage(...args: Parameters<typeof scoreMessageWithEmbedding>) {
+  return localEmbeddingConfigured()
+    ? scoreMessageWithEmbedding(...args)
+    : scoreMessageSync(args[0], args[1], args[2]);
+}
+
+async function fetchHonchoPatterns(url: string, topic: string) {
+  return localEmbeddingConfigured() && isLoopbackURL(url)
+    ? fetchPatternsWithEmbedding(url, topic) : [];
+}
+
 // ─── Plugin State ───────────────────────────────────────────────────────────
 
 const state = {
@@ -61,7 +89,7 @@ const state = {
 
 // ─── Plugin ─────────────────────────────────────────────────────────────────
 
-export default (_input: PluginInput, options?: KompressUltraOptions) => {
+const createContextHooks = (_input: PluginInput, options?: KompressUltraOptions) => {
   const mergedOpts = { ...DEFAULT_OPTIONS, ...options };
 
   // Periodic Status Banner
@@ -92,6 +120,7 @@ export default (_input: PluginInput, options?: KompressUltraOptions) => {
     ];
     console.log(lines.join("\n"));
   }, BANNER_INTERVAL_MS);
+  state.bannerInterval.unref?.();
 
   return {
     // messages.transform: Pruner + Rewriter + Circulator
@@ -155,24 +184,23 @@ export default (_input: PluginInput, options?: KompressUltraOptions) => {
 
       // Token budget escalation
       const agentType = (ctx as Record<string, unknown>).agent_type as string || "orchestrator";
-      const budget = DEFAULT_BUDGETS[agentType] || DEFAULT_BUDGETS.orchestrator;
+      const budget = Object.prototype.hasOwnProperty.call(DEFAULT_BUDGETS, agentType)
+        ? DEFAULT_BUDGETS[agentType as keyof typeof DEFAULT_BUDGETS]
+        : DEFAULT_BUDGETS.orchestrator;
       const budgeted = escalateForBudget(rewritten, budget);
 
-      // CIRCULATOR: enqueue pruned messages
+      // The package embeds circulation batches asynchronously; gate both
+      // destinations and use its actual CirculatorInput shape.
       const prunedCount = messages.length - budgeted.length;
-      if (prunedCount > 0) {
+      if (prunedCount > 0 && localEmbeddingConfigured()
+          && isLoopbackURL(process.env.KOMPRESS_MILVUS_URL ?? "http://localhost:19530")) {
         for (const msg of dropped) {
-          const contentHash = crypto?.getRandomValues?.(new Uint8Array(8))
-            ? Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 16)
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
           enqueueCirculator({
-            session_id: (ctx as Record<string, unknown>).session_id as string || "unknown",
+            content: msg.content,
+            classification: classifyMessage(msg.content),
+            session_id: String(ctx.session_id ?? "unknown"),
             agent_type: agentType,
             message_role: msg.role,
-            content_hash: contentHash,
-            classification: classifyMessage(msg.content),
-            residual: msg.content,
-            timestamp_ms: Date.now(),
           });
         }
       }
@@ -209,7 +237,8 @@ export default (_input: PluginInput, options?: KompressUltraOptions) => {
 
         await writeCompactionStats(mergedOpts.mempalaceDb, prunedCount, budgeted.length);
 
-        if (mergedOpts.droppedMessageDigest && dropped.length > 0) {
+        if (mergedOpts.droppedMessageDigest && dropped.length > 0
+            && localEmbeddingConfigured() && isLoopbackURL(mergedOpts.milvusUrl)) {
           await writeDroppedDigest(dropped, mergedOpts.milvusUrl);
         }
       }
@@ -273,6 +302,47 @@ export default (_input: PluginInput, options?: KompressUltraOptions) => {
       state.lastCompactionAt = now;
 
       return { action: "compaction.trigger", reason: "context_limit_near" };
+    },
+  };
+};
+
+// OpenCode supplies records in the mutable second argument. Retain its IDs,
+// part metadata, protected history and chronology around the text adapter.
+export default async (input: PluginInput, options?: KompressUltraOptions): Promise<Hooks> => {
+  const hooks = createContextHooks(input, options);
+  return {
+    "experimental.chat.messages.transform": async (_input, output) => {
+      const original = output.messages;
+      const contexts: Message[] = original.map((entry, index) => ({
+        role: entry.info.role,
+        content: entry.parts.filter(part => part.type === "text").map(part => part.text).join("\n"),
+        type: entry.parts.length === 1 && entry.parts[0].type === "text"
+          && !entry.parts[0].ignored && !entry.parts[0].synthetic ? undefined : "error",
+        entryIndex: index,
+      }));
+      const ctx: SystemContext = { messages: contexts };
+      await hooks["experimental.chat.messages.transform"](ctx, {});
+      const transformed = new Map(ctx.messages
+        .filter(message => Number.isInteger(message.entryIndex))
+        .map(message => [message.entryIndex as number, message]));
+      const keep = new Set(transformed.keys());
+      contexts.forEach((message, index) => {
+        if (isProtected(message, index, contexts.length)) keep.add(index);
+      });
+      const minimum = original.length - Math.floor(original.length / 2);
+      for (let index = original.length - 1; keep.size < minimum && index >= 0; index--) keep.add(index);
+      output.messages = original.flatMap((entry, index) => {
+        if (!keep.has(index)) return [];
+        const rewritten = transformed.get(index);
+        if (!rewritten || isProtected(contexts[index], index, contexts.length)) return [entry];
+        return [{ ...entry, parts: entry.parts.map(part => part.type === "text"
+          ? { ...part, text: rewritten.content } : part) }];
+      });
+    },
+    "experimental.chat.system.transform": async (input, output) => {
+      const ctx: SystemContext = { messages: [], session_id: input.sessionID, systemPrompt: "" };
+      await hooks["experimental.chat.system.transform"](ctx, {});
+      if (ctx.systemPrompt) output.system.push(ctx.systemPrompt.trim());
     },
   };
 };
