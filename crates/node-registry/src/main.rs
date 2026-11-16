@@ -7,7 +7,7 @@ use loop_engineering_node_registry::{NodeRegistry, TailscaleDiscovery, create_ro
 async fn main() {
     // Init logging
     tracing_subscriber::fmt::init();
-    
+
     // Get config from env
     let tailnet = std::env::var("NODE_REGISTRY_TAILNET")
         .unwrap_or_else(|_| "todolistsec.ts.net".into());
@@ -15,41 +15,41 @@ async fn main() {
         .unwrap_or_else(|_| "60".into())
         .parse::<u64>()
         .unwrap_or(60);
-    
+
     let stale_threshold = std::env::var("STALE_THRESHOLD_SECS")
         .unwrap_or_else(|_| "90".into())
         .parse::<u64>()
         .unwrap_or(90);
-    
+
     // Create registry wrapped in Arc<Mutex> for thread-safe access
     let registry = Arc::new(Mutex::new(NodeRegistry::new(stale_threshold)));
     let discovery = Arc::new(TailscaleDiscovery::new(tailnet));
-    
+
     // Spawn background tasks
     spawn_background_tasks(
         Arc::clone(&registry),
         Arc::clone(&discovery),
         poll_interval,
     );
-    
+
     // Create router
     let app = create_router(Arc::clone(&registry));
-    
+
     // Get bind address
     let addr = std::env::var("NODE_REGISTRY_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:3000".into());
-    
+
     tracing::info!("Starting node-registry on {}", addr);
-    
+
     // Run server with graceful shutdown
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     tracing::info!("node-registry listening on {}", addr);
-    
+
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
-    
+
     tracing::info!("node-registry shut down gracefully");
 }
 

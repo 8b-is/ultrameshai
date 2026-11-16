@@ -1,5 +1,5 @@
 # Specification: Cryptographically Verifiable GitOps Review System
-**Version:** 1.0.0  
+**Version:** 1.0.0
 **Status:** Proposal; not implemented or verified by this PR
 
 ---
