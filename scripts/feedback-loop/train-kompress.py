@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Fine-tune kompress (ModernBERT-149M) on dogfeed compression pairs.
+"""Validate prospective kompress training pairs; training is not implemented.
 
-Loads (input, output) JSONL pairs and fine-tunes a ModernBERT model
-with LoRA to improve the compression/rewriting capability.
+Loads and validates (input, output) JSONL pairs. See README.md for the
+ModernBERT objective mismatch and remaining implementation requirements.
 
-The training task: given the original text, predict the compressed version.
-This is treated as a seq2seq task — input → output generation.
+No model is downloaded and no adapter is trained or published.
 
 Usage:
     python3 scripts/feedback-loop/train-kompress.py \
         --data /tmp/kompress-train.jsonl \
         --output PeetPedro/hf-model-repo \
-        --epochs 3
+        --dry-run
 """
 import argparse
+from fractions import Fraction
 import json
 import os
 import sys
@@ -31,7 +31,7 @@ def main():
                         help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=8,
                         help="Batch size")
-    parser.add_argument("--learning-rate", type=float, default=2e-4,
+    parser.add_argument("--learning-rate", type=Fraction, default=Fraction(1, 5000),
                         help="Learning rate")
     parser.add_argument("--lora-r", type=int, default=16,
                         help="LoRA rank")
@@ -52,8 +52,15 @@ def main():
         for line in f:
             line = line.strip()
             if line:
-                pairs.append(json.loads(line))
+                pair = json.loads(line)
+                if not isinstance(pair, dict) or any(not isinstance(pair.get(k), str) or not pair[k].strip() for k in ("input", "output")):
+                    parser.error("Each row must have nonempty input/output strings")
+                pairs.append(pair)
 
+    if not pairs:
+        parser.error("Training data is empty")
+    if min(args.epochs, args.batch_size, args.lora_r, args.lora_alpha) < 1:
+        parser.error("Training counts must be positive")
     print(f"Loaded {len(pairs)} training pairs")
 
     if args.dry_run:
@@ -70,112 +77,10 @@ def main():
             print(f"    Output ({len(sample['output'])} chars): {sample['output'][:120]}...")
         return
 
-    # --- Fine-tuning with transformers + peft ---
-    try:
-        import torch
-        from transformers import (
-            AutoTokenizer,
-            AutoModelForSeq2SeqLM,
-            Seq2SeqTrainingArguments,
-            Seq2SeqTrainer,
-            DataCollatorForSeq2Seq,
-        )
-        from peft import LoraConfig, get_peft_model, TaskType
-    except ImportError as e:
-        print(f"ERROR: missing dependency: {e}", file=sys.stderr)
-        print("Install: pip install torch transformers peft datasets accelerate", file=sys.stderr)
-        sys.exit(1)
+    # ModernBERT is an encoder, not a seq2seq generator. Do not download a
+    # substitute model or pretend this prototype provides a working trainer.
+    parser.error("Training is not implemented for the ModernBERT pruner objective; use --dry-run for data validation. See scripts/feedback-loop/README.md")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
-
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    model = AutoModelForSeq2SeqLM.from_pretrained(args.base_model).to(device)
-
-    # LoRA config
-    lora_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        target_modules=["q_proj", "v_proj"],
-        lora_dropout=0.1,
-        bias="none",
-        task_type=TaskType.SEQ_2_SEQ_LM,
-    )
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
-
-    # Tokenize dataset
-    inputs = [p["input"] for p in pairs]
-    outputs = [p["output"] for p in pairs]
-
-    model_inputs = tokenizer(inputs, max_length=512, truncation=True, padding=True)
-    labels = tokenizer(outputs, max_length=512, truncation=True, padding=True)
-
-    # Build torch dataset
-    class KompressDataset(torch.utils.data.Dataset):
-        def __init__(self, model_inputs, labels):
-            self.input_ids = model_inputs["input_ids"]
-            self.attention_mask = model_inputs["attention_mask"]
-            self.labels = labels["input_ids"]
-
-        def __len__(self):
-            return len(self.input_ids)
-
-        def __getitem__(self, idx):
-            return {
-                "input_ids": torch.tensor(self.input_ids[idx]),
-                "attention_mask": torch.tensor(self.attention_mask[idx]),
-                "labels": torch.tensor(self.labels[idx]),
-            }
-
-    dataset = KompressDataset(model_inputs, labels)
-
-    # Training args
-    training_args = Seq2SeqTrainingArguments(
-        output_dir="./kompress-checkpoints",
-        per_device_train_batch_size=args.batch_size,
-        num_train_epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        logging_steps=10,
-        save_strategy="epoch",
-        report_to="none",
-    )
-
-    trainer = Seq2SeqTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset,
-        tokenizer=tokenizer,
-        data_collator=DataCollatorForSeq2Seq(tokenizer, model=model),
-    )
-
-    print(f"Starting fine-tuning: {len(pairs)} pairs, {args.epochs} epochs")
-    trainer.train()
-
-    # Save LoRA adapter
-    adapter_path = Path("./kompress-lora-adapter")
-    model.save_pretrained(adapter_path)
-    tokenizer.save_pretrained(adapter_path)
-    print(f"LoRA adapter saved to {adapter_path}")
-
-    # Push to HF Hub if output specified
-    if args.output:
-        try:
-            from huggingface_hub import HfApi
-            api = HfApi()
-            api.upload_folder(
-                folder_path=str(adapter_path),
-                repo_id=args.output,
-                repo_type="model",
-                commit_message="feat(kompress): fine-tune on dogfeed compression pairs [auto]",
-            )
-            print(f"Pushed adapter to https://huggingface.co/{args.output}")
-        except Exception as e:
-            print(f"WARNING: HF push failed: {e}", file=sys.stderr)
-            print(f"Adapter saved locally at {adapter_path}")
 
 
 if __name__ == "__main__":

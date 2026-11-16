@@ -1,13 +1,13 @@
 # Specification: Cryptographically Verifiable GitOps Review System
 **Version:** 1.0.0  
-**Status:** Active  
+**Status:** Proposal; not implemented or verified by this PR  
 
 ---
 
 ## 1. Overview
 The goal is to allow readers to submit anonymous or pseudonymous reviews of the `kompress-ultra` proposal and paper in a way that is:
-1. **Provably Non-Bot:** Leverages GitHub pull requests and account age/activity checks.
-2. **Provably Immutable:** The author cannot modify reviews without invalidating a cryptographic signature.
+1. **Abuse heuristics:** GitHub account age/activity may inform review but cannot prove a human author.
+2. **Tamper evidence:** signatures can detect changes relative to a trusted public key; replacing a self-supplied key and payload is not prevented.
 3. **Transparently Moderated:** The author can delete or reject reviews, but the action is permanently visible in the public Git history.
 
 ---

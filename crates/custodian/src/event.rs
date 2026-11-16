@@ -20,14 +20,17 @@ pub enum Event {
         interpreter: String,
     },
     Reject {
+        timestamp: u64,
         subject: String,
         target: String,
     },
     Accept {
+        sequence: u64,
         subject: String,
         target: String,
     },
     Correct {
+        sequence: u64,
         bad: String,
         good: String,
         reason: String,
@@ -37,23 +40,75 @@ pub enum Event {
 impl Event {
     /// Canonical serialization for hashing.
     pub fn canonical(&self) -> Vec<u8> {
+        // Versioned, length-delimited UTF-8 fields prevent separator collisions.
+        let mut out = b"custodian-event-v1\0".to_vec();
+        let mut field = |value: &str| {
+            out.extend_from_slice(
+                &u64::try_from(value.len())
+                    .expect("field length")
+                    .to_le_bytes(),
+            );
+            out.extend_from_slice(value.as_bytes());
+        };
         match self {
-            Event::Observe { speaker, literal, timestamp, source } => {
-                format!("OBSERVE|{speaker}|{literal}|{timestamp}|{source}").into_bytes()
+            Event::Observe {
+                speaker,
+                literal,
+                timestamp,
+                source,
+            } => {
+                field("OBSERVE");
+                field(speaker);
+                field(literal);
+                field(&timestamp.to_string());
+                field(source);
             }
-            Event::Derive { parent, transform, result, interpreter } => {
-                format!("DERIVE|{parent}|{transform}|{result}|{interpreter}").into_bytes()
+            Event::Derive {
+                parent,
+                transform,
+                result,
+                interpreter,
+            } => {
+                field("DERIVE");
+                field(parent);
+                field(transform);
+                field(result);
+                field(interpreter);
             }
-            Event::Reject { subject, target } => {
-                format!("REJECT|{subject}|{target}").into_bytes()
+            Event::Reject {
+                subject,
+                target,
+                timestamp,
+            } => {
+                field(&timestamp.to_string());
+                field("REJECT");
+                field(subject);
+                field(target);
             }
-            Event::Accept { subject, target } => {
-                format!("ACCEPT|{subject}|{target}").into_bytes()
+            Event::Accept {
+                subject,
+                target,
+                sequence,
+            } => {
+                field(&sequence.to_string());
+                field("ACCEPT");
+                field(subject);
+                field(target);
             }
-            Event::Correct { bad, good, reason } => {
-                format!("CORRECT|{bad}|{good}|{reason}").into_bytes()
+            Event::Correct {
+                bad,
+                good,
+                reason,
+                sequence,
+            } => {
+                field(&sequence.to_string());
+                field("CORRECT");
+                field(bad);
+                field(good);
+                field(reason);
             }
         }
+        out
     }
 
     /// The BLAKE3 content hash as a hex string.

@@ -41,3 +41,25 @@ Reachability, Viability, Recoverability, Path-Dependence.
 
 ## The Universal Invariant
 **The subject must be able to challenge an interpretation without challenging the historical record.**
+
+## Prototype implementation boundary
+
+The Rust crate is an in-memory event/ancestry prototype, not an authenticated or
+persistent identity service. `Decision::record`/`stage` and `admit` leave committed
+history unchanged; only `Decision::commit` appends it. `Custodian` convenience
+methods execute that transaction. Duplicate event identities commit at most once.
+Canonical v1 hashes use length-delimited fields, incompatible with the initial
+ambiguous delimiter format. No migration of deployed state is claimed.
+
+Rejections retain the supplied timestamp. Accept/correct events include a logical
+committed-event ordinal; this is not a wall-clock timestamp. Derived events retain
+their parent and interpreter but do not yet carry the specification's full
+five-tuple. Observed labels describe caller assertions, not verified observations.
+Stance is tracked per subject; accepting cannot cancel another subject's rejection.
+The warrant helper uses Q32 integers and halving rounded down; it is an illustrative
+policy, not measured confidence or an integrated authorization mechanism.
+
+Durable store/replay, authenticated subjects, full event metadata, epoch chaining,
+capacity limits, geometry, janitor compaction and the complete epistemic admission
+policy remain open. The `bench` feature measures insertion/warrant checks only;
+it does not establish phase-space or compaction performance.

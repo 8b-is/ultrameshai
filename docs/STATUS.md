@@ -1,4 +1,27 @@
-# System Status Handoff
+# PR validation status (2026-11-16)
+
+The older handoff below is retained as a historical record, not a statement of
+current deployments. The active ECL change is `2026-06-29-e2e-integration-demo`.
+
+This PR adds a Custodian in-memory prototype with staged commits, unambiguous
+event hashes, retained stance/correction events and fixed-point warrant examples.
+Its documented authentication, durable storage and full admission-policy gaps
+remain open. Dogfeed inference now fails closed outside literal loopback; default
+models and quotas are bounded. No local model is bundled or claimed available.
+
+Dataset-card publication is manual and gated (see `dataset-publishing.md`).
+Feedback extraction/validation works locally; ModernBERT training is explicitly
+not implemented. Historical card/blog/paper benchmarks were not reproduced here.
+
+The local Rust default workspace suite, Custodian all-features tests, Dogfeed Bun
+suite/typecheck/build and an isolated node-registry HTTP/shutdown smoke were run.
+Workspace `--all-features` still fails in the existing Honcho `rig` integration;
+exact main and this PR produce the same errors. Nix is unavailable on this runner;
+no Nix, Raspberry Pi, live fleet, hosted inference or publication result is claimed.
+
+## Historical handoff
+
+### System Status Handoff
 
 ## Current Active Work
 *   **Phase 0 Substrate**: Complete (Tasks 1-5 verified, all 15+ tests passing).

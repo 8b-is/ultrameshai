@@ -221,7 +221,6 @@ export def "main test" [
 
     if ($steps | is-empty) {
         print $"(ansi yellow)  Nothing to run — both steps skipped.(ansi reset)"
-        print $"\n(ansi green_bold)=== All Verification Checks Passed! ===(ansi reset)"
         return
     }
 
@@ -246,7 +245,7 @@ export def "main test" [
                 { key: "ecl", ok: false, skip: true, out: $"($lint_script) not found. Skipping ECL." }
             } else {
                 cd $root
-                let res = (do -i { nu $lint_script } | complete)
+                let res = (do -i { ^($nu.current-exe) $lint_script } | complete)
                 if $res.exit_code != 0 {
                     { key: "ecl", ok: false, out: $res.stdout, err: $res.stderr, code: $res.exit_code }
                 } else {
@@ -261,7 +260,7 @@ export def "main test" [
     for key in $order {
         let r = ($results | where key == $key | first)
         if ($r | get -o skip | default false) {
-            print $"(ansi yellow)  ($r.out)(ansi reset)"
+            die $r.out --hint "Supply the missing repository or explicitly skip the step."
         } else if ($r | get -o ok | default false) {
             print $"(ansi blue)[step] ($key)(ansi reset)"
             print $r.out
@@ -288,7 +287,7 @@ export def "main build" [] {
     if not ($build_engine | path exists) {
         die $"build.nu not found at ($build_engine)." --hint "Set ULTRAMESHAI_PROPOSAL_DIR to the proposal.vaked.dev checkout path."
     }
-    let res = (do -i { nu $build_engine } | complete)
+    let res = (do -i { ^($nu.current-exe) $build_engine } | complete)
     if $res.exit_code != 0 {
         if ($res.stdout | str trim | is-not-empty) { print -e $res.stdout }
         if ($res.stderr | str trim | is-not-empty) { print -e $res.stderr }

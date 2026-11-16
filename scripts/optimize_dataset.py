@@ -1,4 +1,5 @@
 import os
+import argparse
 import re
 import json
 import glob
@@ -6,7 +7,9 @@ import pandas as pd
 from datetime import datetime
 
 def main():
-    repo_dir = "/Users/lodripeter/workspace/peterlodri-sec/ultrawhale-dogfood-temp"
+    parser = argparse.ArgumentParser(description="Consolidate an explicitly selected local dataset")
+    parser.add_argument("repo_dir", help="Local directory of dogfeed-loop JSONL files")
+    repo_dir = parser.parse_args().repo_dir
     print(f"Starting dataset optimization in {repo_dir}...")
 
     # Pattern to match loop files: dogfeed-loop-<index>-<date>-<time>.jsonl
@@ -34,7 +37,7 @@ def main():
             time_str = match.group(3)
             try:
                 # Parse timestamp: YYYYMMDD-HHMMSS
-                dt = datetime.strptime(f"{date_str}-{time_str}", "%Y%m%d-%H%MS")
+                dt = datetime.strptime(f"{date_str}-{time_str}", "%Y%m%d-%H%M%S")
                 timestamp_str = dt.isoformat() + "Z"
             except Exception:
                 pass

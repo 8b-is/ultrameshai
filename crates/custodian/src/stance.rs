@@ -12,17 +12,26 @@ pub struct Stance {
 
 impl Stance {
     pub fn new() -> Self {
-        Self { stances: HashMap::new(), history: HashMap::new() }
+        Self {
+            stances: HashMap::new(),
+            history: HashMap::new(),
+        }
     }
 
     pub fn reject(&mut self, target: &str) {
         self.stances.insert(target.to_string(), false);
-        self.history.entry(target.to_string()).or_default().push("REJECT".to_string());
+        self.history
+            .entry(target.to_string())
+            .or_default()
+            .push("REJECT".to_string());
     }
 
     pub fn accept(&mut self, target: &str) {
         self.stances.insert(target.to_string(), true);
-        self.history.entry(target.to_string()).or_default().push("ACCEPT".to_string());
+        self.history
+            .entry(target.to_string())
+            .or_default()
+            .push("ACCEPT".to_string());
     }
 
     pub fn is_accepted(&self, target: &str) -> bool {
@@ -30,6 +39,9 @@ impl Stance {
     }
 
     pub fn history(&self, target: &str) -> &[String] {
-        self.history.get(target).map(|v| v.as_slice()).unwrap_or(&[])
+        self.history
+            .get(target)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }

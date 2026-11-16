@@ -18,3 +18,14 @@ result-*
 
 # Git Worktrees
 .worktrees/
+# Local agent state and generated data
+.brain.json
+.slim/worktrees.json
+.opencode/.kompress/
+packages/dogfeed/*.db
+packages/dogfeed/*.db-shm
+packages/dogfeed/*.db-wal
+packages/dogfeed/stats.json
+portail.toml.history
+node_modules/
+__pycache__/

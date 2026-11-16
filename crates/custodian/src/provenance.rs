@@ -1,6 +1,6 @@
-//! Provenance — ancestry + hash-chain verification.
+//! Provenance — in-memory ancestry and a Merkle root over committed events.
 //! The laws: derived meaning never inherits observed provenance;
-//! transform(x) != x => prov(transform(x)) != prov(x).
+//! Each derivation has its own event identity and explicit parent.
 
 use crate::event::Event;
 use std::collections::HashMap;
@@ -24,53 +24,75 @@ pub struct ProvenanceChain {
 
 impl ProvenanceChain {
     pub fn new() -> Self {
-        Self { nodes: HashMap::new(), log: Vec::new() }
+        Self {
+            nodes: HashMap::new(),
+            log: Vec::new(),
+        }
     }
 
-    pub fn observe(&mut self, speaker: &str, literal: &str, t: u64, source: &str) -> String {
-        let ev = Event::Observe {
-            speaker: speaker.to_string(),
-            literal: literal.to_string(),
-            timestamp: t,
-            source: source.to_string(),
-        };
-        let h = ev.hash();
-        self.log.push(ev);
-        self.nodes.insert(
-            h.clone(),
-            Node {
-                id: h.clone(),
-                provenance: crate::Provenance::Observed,
-                parents: vec![],
-                content: literal.to_string(),
-                agent: speaker.to_string(),
-            },
-        );
-        h
+    pub(crate) fn valid(&self, event: &Event) -> bool {
+        match event {
+            Event::Observe { .. } => true,
+            Event::Derive { parent, .. } => self.nodes.contains_key(parent),
+            Event::Reject {
+                subject, target, ..
+            }
+            | Event::Accept {
+                subject, target, ..
+            } => self.nodes.contains_key(subject) && self.nodes.contains_key(target),
+            Event::Correct { bad, good, .. } => {
+                self.nodes.contains_key(bad) && self.nodes.contains_key(good)
+            }
+        }
     }
 
-    /// Derive — provenance ALWAYS downgraded.
-    pub fn derive(&mut self, parent: &str, transform: &str, result: &str, interpreter: &str) -> Option<String> {
-        let parent_node = self.nodes.get(parent)?;
-        let ev = Event::Derive {
-            parent: parent.to_string(),
-            transform: transform.to_string(),
-            result: result.to_string(),
-            interpreter: interpreter.to_string(),
-        };
-        let h = ev.hash();
-        self.log.push(ev);
-        self.nodes.insert(
-            h.clone(),
-            Node {
-                id: h.clone(),
-                provenance: parent_node.provenance.downgrade(),
-                parents: vec![parent.to_string()],
-                content: result.to_string(),
-                agent: interpreter.to_string(),
-            },
-        );
-        Some(h)
+    // Only Decision::commit calls this mutation boundary.
+    pub(crate) fn apply(&mut self, event: Event) -> Option<String> {
+        if !self.valid(&event) {
+            return None;
+        }
+        let id = event.hash();
+        match &event {
+            Event::Observe {
+                speaker, literal, ..
+            } => {
+                self.nodes.insert(
+                    id.clone(),
+                    Node {
+                        id: id.clone(),
+                        provenance: crate::Provenance::Observed,
+                        parents: vec![],
+                        content: literal.clone(),
+                        agent: speaker.clone(),
+                    },
+                );
+            }
+            Event::Derive {
+                parent,
+                result,
+                interpreter,
+                ..
+            } => {
+                let provenance = self.nodes.get(parent)?.provenance.downgrade();
+                self.nodes.insert(
+                    id.clone(),
+                    Node {
+                        id: id.clone(),
+                        provenance,
+                        parents: vec![parent.clone()],
+                        content: result.clone(),
+                        agent: interpreter.clone(),
+                    },
+                );
+            }
+            _ => {}
+        }
+        self.log.push(event);
+        Some(id)
+    }
+
+    pub fn events(&self) -> &[Event] {
+        &self.log
     }
 
     pub fn provenance(&self, h: &str) -> Option<crate::Provenance> {
