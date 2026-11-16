@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { PluginInput } from "@opencode-ai/plugin";
-import plugin, { scoreMessage, fetchHonchoPatterns } from "../kompress-ultra";
+import plugin from "../kompress-ultra";
+import { scoreMessage, fetchHonchoPatterns } from "../../lib/kompress-ultra";
 
 const originalFetch = globalThis.fetch;
 const originalEndpoint = process.env.OVHCLOUD_EMBEDDING_URL;
@@ -18,6 +19,24 @@ function entry(index: number, role = "assistant") {
 }
 
 describe("OpenCode hook ABI", () => {
+  test("discovered context entrypoint exports only its plugin factory", async () => {
+    const directory = new URL("../", import.meta.url).pathname;
+    for await (const name of new Bun.Glob("*.ts").scan(directory)) {
+      const discovered = await import(new URL(name, new URL("../", import.meta.url)).href);
+      expect(Object.keys(discovered)).toEqual(["default"]);
+      expect(typeof discovered.default).toBe("function");
+    }
+    const module = await import("../kompress-ultra");
+    expect(Object.keys(module)).toEqual(["default"]);
+    // OpenCode 1.17.11's legacy loader invokes every unique module export.
+    for (const factory of new Set(Object.values(module))) {
+      const hooks = await factory({} as PluginInput);
+      expect(typeof hooks["experimental.chat.messages.transform"]).toBe("function");
+      expect(typeof hooks["experimental.chat.system.transform"]).toBe("function");
+    }
+    expect(await Bun.file(new URL("../litellm-hook.ts", import.meta.url)).exists()).toBe(false);
+  });
+
   test("messages are transformed through output while protected records and order survive", async () => {
     globalThis.fetch = (() => { throw new Error("Unexpected network access"); }) as typeof fetch;
     delete process.env.OVHCLOUD_EMBEDDING_URL;

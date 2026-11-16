@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { isProtected, ebbinghausDecay, structuralBoost, scoreMessage } from '../kompress-ultra';
+import { isProtected, ebbinghausDecay, structuralBoost, scoreMessage } from '../../lib/kompress-ultra';
 
 describe('isProtected', () => {
   test('last 5 messages are protected', () => {

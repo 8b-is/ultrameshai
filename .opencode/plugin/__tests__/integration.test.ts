@@ -4,10 +4,10 @@ import {
   scoreMessage,
   ebbinghausDecay,
   structuralBoost,
-} from "../kompress-ultra";
+} from "../../lib/kompress-ultra";
 import { compressMessage, CompressionLevel } from "../../lib/rewriter";
 import { CoProcessor } from "../../lib/co-processor";
-import { kompressMiddleware, type LiteLLMRequest } from "../litellm-hook";
+import { kompressMiddleware, type LiteLLMRequest } from "../../lib/litellm-hook";
 import {
   readFileSidecar,
   writeFileSidecar,
