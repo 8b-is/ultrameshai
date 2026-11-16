@@ -65,17 +65,24 @@ Each review is stored in `reviews/review-<timestamp>.json` with the following st
 
 ---
 
-## 4. Verification & Trust Guarantees
+## 4. Proposed Verification and Trust Assumptions
 
-### Immutability Guarantee
-The payload is signed using the reviewer's private key. The public key is embedded in the JSON.
-At page load, `app.js` executes:
+### Tamper evidence with a pinned key
+The proposed payload is signed using the reviewer's private key. A verifier must
+pin a trusted public key outside the editable payload; an embedded key alone does
+not establish identity or prevent wholesale key/payload/signature replacement.
+The following `app.js` verification/UI flow is proposed, not implemented here:
 $$\text{Verify}(\text{Payload}, \text{Signature}, \text{PublicKey}) \to \text{Valid} \mid \text{Invalid}$$
-If the repository owner modifies the `comment` or `rating` in the file, the signature will fail to verify, and the UI will display a prominent tampering warning.
+Changing `comment` or `rating` without a new valid signature fails verification
+against that pinned key. A future UI should display that failure, provided the
+verifier and key pinning are also delivered through a trusted channel.
 
-### Deletion Transparency
-If the repository owner deletes a review file, the deletion is recorded as a commit:
+### Deletion visibility in preserved history
+A deletion committed to retained Git history can be inspected with:
 ```bash
 git log --diff-filter=D --summary
 ```
-This ensures all moderation actions are publicly auditable.
+This does not guarantee complete public auditability: rewritten or removed remote
+history, unpublished changes and a replaced site can hide actions. Independent
+retained clones or an append-only transparency service would be needed to support
+stronger claims. Neither is implemented by this proposal.

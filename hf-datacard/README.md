@@ -31,6 +31,13 @@ configs:
     path: data/latest.jsonl
 ---
 
+> Fork publication note (2026-11-16): operational descriptions and benchmark
+> claims below are preserved upstream descriptions with their original attribution.
+> They have not been verified for this 8b-is fork. A continuously running loop,
+> trained adapter, live dataset publication or measured savings is not established
+> by the local tests. See [publication prerequisites](../docs/dataset-publishing.md)
+> in the source repository before enabling uploads.
+
 <div align="center">
 
 <img src="assets/logo.svg" alt="Ultrawhale Dogfood" width="160" height="160"/>

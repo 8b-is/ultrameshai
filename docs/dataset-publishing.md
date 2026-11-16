@@ -16,3 +16,8 @@ written to workflow outputs. See the official
 This change performs no live upload and does not establish that the destination
 or publisher configuration exists. Other new agent workflows are manual,
 read-only diagnostics; they do not create PRs, labels or comments.
+
+The dataset card retains upstream attribution and historical operational/benchmark
+claims. Those descriptions were not verified for this fork and must be reviewed
+by the destination owner before publication; local tests do not establish a live
+loop, trained adapter, dataset contents or measured savings.
