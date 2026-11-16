@@ -2,8 +2,8 @@
 // Intercepts /v1/chat/completions, scores → prunes → rewrites messages before model call
 // Lightweight: no milvus calls, no embedding calls. Falls through unchanged on any error.
 
-import { isProtected } from "./kompress-ultra";
-import { compressMessage, CompressionLevel } from "../lib/rewriter.js";
+import { isProtected } from "./kompress-ultra.js";
+import { compressMessage, CompressionLevel } from "./rewriter.js";
 
 export interface LiteLLMRequest {
   model: string;

@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { kompressMiddleware, type LiteLLMRequest } from "../litellm-hook";
+import { kompressMiddleware, type LiteLLMRequest } from "../../lib/litellm-hook";
 
 function makeMessages(count: number): LiteLLMRequest["messages"] {
   return Array.from({ length: count }, (_, i) => ({
