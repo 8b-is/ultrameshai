@@ -35,7 +35,7 @@ configs:
 > claims below are preserved upstream descriptions with their original attribution.
 > They have not been verified for this 8b-is fork. A continuously running loop,
 > trained adapter, live dataset publication or measured savings is not established
-> by the local tests. See [publication prerequisites](../docs/dataset-publishing.md)
+> by the local tests. See [publication prerequisites](https://github.com/8b-is/ultrameshai/blob/main/docs/dataset-publishing.md)
 > in the source repository before enabling uploads.
 
 <div align="center">
