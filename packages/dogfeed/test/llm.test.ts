@@ -35,3 +35,24 @@ test('local request disables redirects and proxies and identifies backend', asyn
   }) as unknown as typeof fetch;
   expect(await ask('p', 'local/m', '', '', 5)).toEqual({ content: 'fixture', model: 'local/m', tokens_in: 3, tokens_out: 2 });
 });
+
+test('real loopback transport ignores proxies and refuses redirects', async () => {
+  const saved = process.env.HTTP_PROXY;
+  let redirected = 0;
+  const target = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => { redirected++; return Response.json({ message: { content: 'redirect target' } }); } });
+  let redirect = false;
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => redirect
+    ? Response.redirect(`http://127.0.0.1:${target.port}/api/chat`)
+    : Response.json({ message: { content: 'local fixture' }, eval_count: 1 }) });
+  try {
+    process.env.HTTP_PROXY = 'http://127.0.0.1:9';
+    process.env.OLLAMA_HOST = `http://127.0.0.1:${server.port}`;
+    expect((await askLocal('p', 'fixture', 5))?.content).toBe('local fixture');
+    redirect = true;
+    expect(await askLocal('p', 'fixture', 5)).toBeNull();
+    expect(redirected).toBe(0);
+  } finally {
+    if (saved === undefined) delete process.env.HTTP_PROXY; else process.env.HTTP_PROXY = saved;
+    server.stop(true); target.stop(true);
+  }
+});

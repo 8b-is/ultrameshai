@@ -9,7 +9,6 @@ No model is downloaded and no adapter is trained or published.
 Usage:
     python3 scripts/feedback-loop/train-kompress.py \
         --data /tmp/kompress-train.jsonl \
-        --output PeetPedro/hf-model-repo \
         --dry-run
 """
 import argparse
@@ -21,12 +20,12 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune kompress on dogfeed data")
+    parser = argparse.ArgumentParser(description="Validate prospective kompress training data (training unavailable)")
     parser.add_argument("--data", required=True, help="Training JSONL file (input/output pairs)")
     parser.add_argument("--base-model", default="answerdotai/ModernBERT-base",
                         help="Base model for fine-tuning")
     parser.add_argument("--output", default=None,
-                        help="HF repo to push LoRA adapter to")
+                        help="Reserved destination metadata; no upload is implemented")
     parser.add_argument("--epochs", type=int, default=3,
                         help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=8,
