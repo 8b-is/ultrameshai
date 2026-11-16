@@ -293,7 +293,8 @@ export default async (input: PluginInput, options?: KompressUltraOptions): Promi
       contexts.forEach((message, index) => {
         if (isProtected(message, index, contexts.length)) keep.add(index);
       });
-      const minimum = original.length - Math.floor(original.length / 2);
+      // Array lengths are uint32; this shift computes the integer half exactly.
+      const minimum = original.length - (original.length >>> 1);
       for (let index = original.length - 1; keep.size < minimum && index >= 0; index--) keep.add(index);
       output.messages = original.flatMap((entry, index) => {
         if (!keep.has(index)) return [];
