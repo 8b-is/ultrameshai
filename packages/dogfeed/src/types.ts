@@ -20,8 +20,8 @@ export interface DogfeedConfig {
 }
 
 export const DEFAULT_CONFIG: DogfeedConfig = {
-  models: ["qwen/qwen-2.5-7b-instruct:free"],
-  maxTokens: 512,
+  models: ["local/qwen2.5:3b"],
+  maxTokens: 1024,
   intervalSec: 30,
   topics: [],
   ralphEvery: 50,

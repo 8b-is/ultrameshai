@@ -1,0 +1,17 @@
+name: Chore Agent
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependency-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Report Rust dependency updates
+        run: |
+          cargo install cargo-outdated --locked
+          cargo outdated --root-deps-only
+# Diagnostic only: dependency changes and publication require a reviewed PR.
